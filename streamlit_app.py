@@ -1,383 +1,476 @@
-import os
 import io
-import time
+import os
 import requests
 import pandas as pd
 import streamlit as st
 
-API_BASE = "http://localhost:8000"
+API_BASE = "http://51.21.150.144:8080"
 
-# ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Credit Card Fraud Detection",
+    page_title="FraudShield — Credit Card Fraud Detection",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
-# ── Global CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+/* ── Reset & Base ── */
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif !important;
+}
 
 .stApp {
-    background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-    min-height: 100vh;
+    background: #0a0f1e;
 }
 
-section[data-testid="stSidebar"] {
-    background: rgba(255,255,255,0.05);
-    backdrop-filter: blur(20px);
-    border-right: 1px solid rgba(255,255,255,0.1);
+/* ── Hide default streamlit elements ── */
+#MainMenu, footer, header { visibility: hidden; }
+.block-container {
+    padding: 0 3rem 2rem 3rem !important;
+    max-width: 1200px !important;
 }
-section[data-testid="stSidebar"] * { color: #e0e0e0 !important; }
 
+/* ── Top Nav Bar ── */
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.2rem 0 1rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 2.5rem;
+}
+.nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+.nav-brand-icon { font-size: 1.6rem; }
+.nav-brand-text {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    letter-spacing: -0.3px;
+}
+.nav-brand-sub {
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: #64748b;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.nav-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 999px;
+    padding: 0.4rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+.dot-green { color: #22c55e; font-size: 0.55rem; }
+.dot-red   { color: #ef4444; font-size: 0.55rem; }
+.status-text-green { color: #86efac; }
+.status-text-red   { color: #fca5a5; }
+
+/* ── Hero Section ── */
 .hero {
-    background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(168,85,247,0.3));
-    border: 1px solid rgba(99,102,241,0.4);
-    border-radius: 20px;
-    padding: 2.5rem 2rem;
-    margin-bottom: 2rem;
     text-align: center;
-    backdrop-filter: blur(10px);
+    padding: 1rem 0 2.5rem 0;
 }
-.hero h1 { font-size: 2.4rem; font-weight: 700; color: #fff; margin: 0; letter-spacing: -0.5px; }
-.hero p  { color: rgba(255,255,255,0.65); margin: 0.5rem 0 0; font-size: 1.05rem; }
+.hero-badge {
+    display: inline-block;
+    background: rgba(139,92,246,0.15);
+    border: 1px solid rgba(139,92,246,0.35);
+    color: #c4b5fd;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.35rem 1rem;
+    border-radius: 999px;
+    margin-bottom: 1.2rem;
+}
+.hero h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    color: #f8fafc !important;
+    letter-spacing: -1px;
+    line-height: 1.1;
+    margin: 0 0 1rem 0;
+}
+.hero h1 span {
+    background: linear-gradient(135deg, #818cf8, #a78bfa, #e879f9);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.hero p {
+    font-size: 1.05rem;
+    color: #94a3b8 !important;
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.7;
+}
 
-.glass-card {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
+/* ── Cards ── */
+.card {
+    background: #111827;
+    border: 1px solid rgba(255,255,255,0.07);
     border-radius: 16px;
-    padding: 1.5rem 1.75rem;
-    backdrop-filter: blur(12px);
-    margin-bottom: 1.25rem;
+    padding: 1.5rem;
 }
-.glass-card h3 { color: #a78bfa; font-size: 1rem; font-weight: 600;
-                  text-transform: uppercase; letter-spacing: 1px; margin: 0 0 0.75rem; }
+.card-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 0.75rem;
+}
 
-.metric-row { display: flex; gap: 1rem; flex-wrap: wrap; }
-.metric-chip {
-    flex: 1; min-width: 120px;
-    background: rgba(99,102,241,0.15);
-    border: 1px solid rgba(99,102,241,0.35);
-    border-radius: 12px;
-    padding: 1rem;
+/* ── Stat Cards ── */
+.stat-card {
+    background: #111827;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 1.25rem 1rem;
     text-align: center;
+    transition: border-color 0.2s;
 }
-.metric-chip .label { font-size: 0.72rem; color: rgba(255,255,255,0.5);
-                       text-transform: uppercase; letter-spacing: 1px; }
-.metric-chip .value { font-size: 1.6rem; font-weight: 700; color: #a78bfa; line-height: 1.2; }
+.stat-card:hover { border-color: rgba(139,92,246,0.4); }
+.stat-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+.stat-value {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1;
+    color: #f1f5f9;
+}
+.stat-value.purple { color: #a78bfa; }
+.stat-value.green  { color: #4ade80; }
+.stat-value.red    { color: #f87171; }
+.stat-value.amber  { color: #fbbf24; }
 
-.api-online  { color: #10b981; font-weight: 700; }
-.api-offline { color: #ef4444; font-weight: 700; }
+/* ── Section headers ── */
+.section-header {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #f1f5f9 !important;
+    margin-bottom: 0.35rem;
+}
+.section-sub {
+    font-size: 0.85rem;
+    color: #64748b !important;
+    margin-bottom: 1.2rem;
+}
+
+/* ── Streamlit overrides ── */
+[data-testid="stFileUploader"] {
+    background: #111827 !important;
+    border: 2px dashed rgba(139,92,246,0.35) !important;
+    border-radius: 12px !important;
+}
+[data-testid="stFileUploader"] * { color: #cbd5e1 !important; }
 
 .stButton > button {
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
-    color: #fff; border: none; border-radius: 10px;
-    padding: 0.65rem 2rem; font-weight: 600; font-size: 0.95rem;
-    transition: all 0.2s ease; width: 100%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    font-size: 0.9rem !important;
+    padding: 0.7rem 1.5rem !important;
+    width: 100% !important;
+    letter-spacing: 0.02em !important;
+    transition: opacity 0.2s !important;
 }
-.stButton > button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(99,102,241,0.45);
+.stButton > button:hover { opacity: 0.88 !important; }
+.stButton > button:disabled {
+    background: #1e293b !important;
+    color: #475569 !important;
 }
 
-[data-testid="stFileUploader"] {
-    background: rgba(255,255,255,0.04);
-    border: 2px dashed rgba(99,102,241,0.4);
-    border-radius: 14px; padding: 1rem;
+[data-testid="stDataFrame"] {
+    border-radius: 10px !important;
+    overflow: hidden !important;
 }
 
-hr { border-color: rgba(255,255,255,0.08) !important; }
-h1,h2,h3,h4 { color: #f3f4f6 !important; }
-p, li, label, span { color: #d1d5db; }
-.stMarkdown p { color: #d1d5db; }
+/* Dataframe dark */
+.stDataFrame iframe { background: #111827; }
+
+/* Metrics */
+[data-testid="metric-container"] {
+    background: #111827;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 1rem !important;
+}
+[data-testid="metric-container"] label { color: #94a3b8 !important; }
+[data-testid="metric-container"] [data-testid="metric-value"] { color: #f1f5f9 !important; font-weight: 700 !important; }
+
+/* Expander */
+[data-testid="stExpander"] {
+    background: #111827 !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 14px !important;
+}
+[data-testid="stExpander"] summary {
+    color: #e2e8f0 !important;
+    font-weight: 600 !important;
+}
+[data-testid="stExpander"] summary:hover { color: #a78bfa !important; }
+
+/* Alert/warning/error boxes */
+[data-testid="stAlert"] { border-radius: 10px !important; }
+
+/* Download button */
+[data-testid="stDownloadButton"] button {
+    background: #1e293b !important;
+    color: #a78bfa !important;
+    border: 1px solid rgba(139,92,246,0.4) !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+}
+[data-testid="stDownloadButton"] button:hover {
+    background: rgba(139,92,246,0.12) !important;
+}
+
+/* Caption/small text */
+.stCaption p, small { color: #64748b !important; }
+
+/* Info box */
+.info-pill {
+    background: rgba(139,92,246,0.1);
+    border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    color: #c4b5fd;
+    font-size: 0.85rem;
+    line-height: 1.8;
+}
+.info-pill code {
+    background: rgba(139,92,246,0.2);
+    color: #e9d5ff;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+/* Separator */
+.sep {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    margin: 2rem 0;
+}
+
+/* Spinner override */
+.stSpinner > div { border-top-color: #8b5cf6 !important; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0a0f1e; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
 </style>
 """, unsafe_allow_html=True)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
-def check_api() -> bool:
+def check_api():
     try:
-        r = requests.get(f"{API_BASE}/health", timeout=3)
+        r = requests.get(f"{API_BASE}/health", timeout=5)
         return r.status_code == 200
     except Exception:
         return False
 
-def api_status_badge() -> str:
-    if check_api():
-        return "<span class='api-online'>● API Online</span>"
-    return "<span class='api-offline'>● API Offline — start app.py first</span>"
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown(f"""
-    <div style='text-align:center; padding: 1rem 0 1rem;'>
-        <div style='font-size:3rem;'>🛡️</div>
-        <div style='font-size:1.1rem; font-weight:700; color:#a78bfa;'>Fraud Shield</div>
-        <div style='font-size:0.75rem; color:rgba(255,255,255,0.4); margin-top:4px;'>ML Detection Platform</div>
+api_online = check_api()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NAV BAR
+# ══════════════════════════════════════════════════════════════════════════════
+if api_online:
+    status_html = "<span class='dot-green'>●</span><span class='status-text-green'>API Connected</span>"
+else:
+    status_html = "<span class='dot-red'>●</span><span class='status-text-red'>API Offline</span>"
+
+st.markdown(f"""
+<div class="navbar">
+    <div class="nav-brand">
+        <span class="nav-brand-icon">🛡️</span>
+        <div>
+            <div class="nav-brand-text">FraudShield</div>
+            <div class="nav-brand-sub">ML Detection Platform</div>
+        </div>
     </div>
-    <div style='text-align:center; margin-bottom:1rem; font-size:0.82rem;'>{api_status_badge()}</div>
-    """, unsafe_allow_html=True)
+    <div class="nav-status">{status_html}</div>
+</div>
+""", unsafe_allow_html=True)
 
-    st.divider()
-    page = st.radio(
-        "Navigation",
-        ["🏠  Home", "🚀  Train Pipeline", "🔍  Predict"],
+# ══════════════════════════════════════════════════════════════════════════════
+# HERO
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<div class="hero">
+    <div class="hero-badge">⚡ Powered by Machine Learning</div>
+    <h1>Detect <span>Fraudulent</span><br>Transactions Instantly</h1>
+    <p>Upload your transaction data and our ML pipeline will flag suspicious activity in seconds.</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN CONTENT — Two columns
+# ══════════════════════════════════════════════════════════════════════════════
+left, right = st.columns([3, 2], gap="large")
+
+with left:
+    st.markdown('<p class="section-header">📂 Upload Transaction Data</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-sub">Drop a CSV file with credit card transactions below</p>', unsafe_allow_html=True)
+
+    uploaded_file = st.file_uploader(
+        "Upload CSV",
+        type=["csv"],
         label_visibility="collapsed",
     )
-    st.divider()
-    st.markdown(f"""
-    <div style='font-size:0.72rem; color:rgba(255,255,255,0.3); text-align:center; padding-top:0.5rem;'>
-        API → <code>{API_BASE}</code>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# PAGE: HOME
-# ══════════════════════════════════════════════════════════════════════════════
-if page == "🏠  Home":
-    st.markdown("""
-    <div class='hero'>
-        <h1>🛡️ Credit Card Fraud Detection</h1>
-        <p>Enterprise-grade ML pipeline — powered by FastAPI + Streamlit</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-    cards = [
-        ("📥 Data Ingestion",    "Pulls transactions from MongoDB Atlas, saves raw CSV to feature store, performs stratified train/test split."),
-        ("✅ Validation & Drift", "Schema checks, required column validation, KS-test based dataset drift detection with YAML report."),
-        ("⚙️ Transformation",     "KNN imputation pipeline fitted on training data, saves numpy arrays and serialised preprocessor."),
-        ("🤖 Model Training",    "GridSearchCV over LR, DT, Random Forest. Best model selected by F1 score on 20% sub-sample."),
-        ("📊 Metrics",           "Precision, Recall, F1 reported on full train & test sets after best model is selected."),
-        ("🔍 Inference",         "Upload CSV → REST API call → fraud predictions with per-row labels and downloadable results."),
-    ]
-    for col, (title, desc) in zip([col1, col2, col3, col1, col2, col3], cards):
-        with col:
-            st.markdown(f"""
-            <div class='glass-card'>
-                <h3>{title}</h3>
-                <p style='color:rgba(255,255,255,0.6); font-size:0.9rem;'>{desc}</p>
-            </div>""", unsafe_allow_html=True)
-
-    model_path = "final_model/model.pkl"
-    st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists(model_path):
-        size_kb = os.path.getsize(model_path) / 1024
-        trained = time.strftime("%d %b %Y  %H:%M", time.localtime(os.path.getmtime(model_path)))
-        st.markdown(f"""
-        <div class='glass-card'>
-            <h3>🟢 Model Status</h3>
-            <div class='metric-row'>
-                <div class='metric-chip'><div class='label'>Status</div>
-                    <div style='color:#10b981;font-size:1rem;font-weight:700;margin-top:4px;'>Trained ✓</div></div>
-                <div class='metric-chip'><div class='label'>Size</div>
-                    <div class='value'>{size_kb:.1f}<span style='font-size:0.8rem;color:#6b7280;'> KB</span></div></div>
-                <div class='metric-chip'><div class='label'>Last Trained</div>
-                    <div style='color:#a78bfa;font-size:0.85rem;font-weight:600;margin-top:6px;'>{trained}</div></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class='glass-card'>
-            <h3>🔴 Model Status</h3>
-            <p style='color:#f87171;'>No trained model found. Go to <b>Train Pipeline</b> to train one.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# PAGE: TRAIN PIPELINE
-# ══════════════════════════════════════════════════════════════════════════════
-elif page == "🚀  Train Pipeline":
-    st.markdown("""
-    <div class='hero'>
-        <h1>🚀 Training Pipeline</h1>
-        <p>Calls <code>GET /train</code> on the FastAPI backend to run the full ML pipeline</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if not check_api():
-        st.error("❌ FastAPI server is not running. Start it with: `python app.py`")
-        st.stop()
-
-    st.markdown("""
-    <div class='glass-card'>
-        <h3>⚠️ Before You Start</h3>
-        <ul style='color:rgba(255,255,255,0.65); font-size:0.9rem; line-height:1.8;'>
-            <li>Ensure <code>.env</code> has a valid <code>DB_URL</code> MongoDB connection string</li>
-            <li>Each run creates a new timestamped folder under <code>artifacts/</code></li>
-            <li>Training uses a 20% stratified sample — expect ~5–10 minutes</li>
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_btn, _ = st.columns([1, 2])
-    with col_btn:
-        run_training = st.button("▶  Run Full Pipeline", use_container_width=True)
-
-    if run_training:
-        with st.spinner("Pipeline running… this may take several minutes"):
-            try:
-                resp = requests.get(f"{API_BASE}/train", timeout=600)
-                resp.raise_for_status()
-                data = resp.json()
-            except requests.exceptions.Timeout:
-                st.error("❌ Request timed out. The pipeline may still be running in the background.")
-                st.stop()
-            except Exception as ex:
-                st.error(f"❌ API error: {ex}")
-                st.stop()
-
-        st.success("🎉 " + data.get("message", "Pipeline complete!"))
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"""
-            <div class='glass-card'>
-                <h3>🏋️ Train Metrics</h3>
-                <div class='metric-row'>
-                    <div class='metric-chip'><div class='label'>F1</div>
-                        <div class='value'>{data['train_f1']}</div></div>
-                    <div class='metric-chip'><div class='label'>Precision</div>
-                        <div class='value'>{data['train_precision']}</div></div>
-                    <div class='metric-chip'><div class='label'>Recall</div>
-                        <div class='value'>{data['train_recall']}</div></div>
-                </div>
-            </div>""", unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"""
-            <div class='glass-card'>
-                <h3>🧪 Test Metrics</h3>
-                <div class='metric-row'>
-                    <div class='metric-chip'><div class='label'>F1</div>
-                        <div class='value'>{data['test_f1']}</div></div>
-                    <div class='metric-chip'><div class='label'>Precision</div>
-                        <div class='value'>{data['test_precision']}</div></div>
-                    <div class='metric-chip'><div class='label'>Recall</div>
-                        <div class='value'>{data['test_recall']}</div></div>
-                </div>
-            </div>""", unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div class='glass-card'>
-            <h3>💾 Saved Model</h3>
-            <p style='font-size:0.9rem; color:rgba(255,255,255,0.6);'>
-                {data.get('trained_model_path', 'artifacts/.../model.pkl')}<br>
-                Final model → <code>final_model/model.pkl</code>
-            </p>
-        </div>""", unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# PAGE: PREDICT
-# ══════════════════════════════════════════════════════════════════════════════
-elif page == "🔍  Predict":
-    st.markdown("""
-    <div class='hero'>
-        <h1>🔍 Fraud Prediction</h1>
-        <p>Calls <code>POST /predict</code> — upload a CSV and get instant results</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if not check_api():
-        st.error("❌ FastAPI server is not running. Start it with: `python app.py`")
-        st.stop()
-
-    if not os.path.exists("final_model/model.pkl"):
-        st.warning("⚠️ No trained model found. Please run the Training Pipeline first.")
-        st.stop()
-
-    col_up, col_info = st.columns([1, 1])
-    with col_up:
-        st.markdown("<div class='glass-card'><h3>📂 Upload Transactions CSV</h3></div>",
-                    unsafe_allow_html=True)
-        uploaded_file = st.file_uploader(
-            "Drop CSV here",
-            type=["csv"],
-            label_visibility="collapsed",
-        )
-    with col_info:
-        st.markdown("""
-        <div class='glass-card'>
-            <h3>ℹ️ Expected Format</h3>
-            <p style='font-size:0.85rem; color:rgba(255,255,255,0.6); line-height:1.8;'>
-                • Columns: <code>Time</code>, <code>V1</code>–<code>V28</code>, <code>Amount</code><br>
-                • <code>Class</code> column is optional (ignored during inference)<br>
-                • Any number of rows
-            </p>
-        </div>""", unsafe_allow_html=True)
 
     if uploaded_file:
         df_preview = pd.read_csv(uploaded_file)
-        st.markdown(f"""
-        <div class='glass-card'>
-            <h3>📋 Preview</h3>
-            <p style='font-size:0.8rem; color:rgba(255,255,255,0.45); margin-bottom:0.5rem;'>
-                {len(df_preview):,} rows × {len(df_preview.columns)} columns
-            </p>
-        </div>""", unsafe_allow_html=True)
-        st.dataframe(df_preview.head(10), use_container_width=True)
+        st.caption(f"{len(df_preview):,} rows · {len(df_preview.columns)} columns detected")
+        st.dataframe(df_preview.head(6), use_container_width=True, hide_index=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        col_run, _ = st.columns([1, 2])
-        with col_run:
-            run_predict = st.button("🔍  Run Prediction", use_container_width=True)
+        col_btn, _ = st.columns([2, 1])
+        with col_btn:
+            run_predict = st.button("🔍  Analyse Transactions", disabled=not api_online)
 
         if run_predict:
             uploaded_file.seek(0)
-            csv_bytes = uploaded_file.read()
-
-            with st.spinner("Sending to API…"):
+            with st.spinner("Analysing transactions…"):
                 try:
                     resp = requests.post(
                         f"{API_BASE}/predict",
-                        files={"file": ("data.csv", io.BytesIO(csv_bytes), "text/csv")},
+                        files={"file": ("data.csv", io.BytesIO(uploaded_file.read()), "text/csv")},
                         timeout=120,
                     )
                     resp.raise_for_status()
                     data = resp.json()
                 except Exception as ex:
-                    st.error(f"❌ API error: {ex}")
+                    st.error(f"❌ Prediction failed: {ex}")
                     st.stop()
 
-            n_total  = data["total"]
-            n_fraud  = data["fraudulent"]
-            n_legit  = data["legitimate"]
-            fraud_pct = data["fraud_rate_pct"]
+            st.markdown("<hr class='sep'>", unsafe_allow_html=True)
+            st.markdown('<p class="section-header">📊 Results</p>', unsafe_allow_html=True)
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.markdown(f"""<div class="stat-card"><div class="stat-label">Total</div>
+                <div class="stat-value purple">{data['total']:,}</div></div>""", unsafe_allow_html=True)
+            c2.markdown(f"""<div class="stat-card"><div class="stat-label">Legitimate</div>
+                <div class="stat-value green">{data['legitimate']:,}</div></div>""", unsafe_allow_html=True)
+            c3.markdown(f"""<div class="stat-card"><div class="stat-label">Fraudulent</div>
+                <div class="stat-value red">{data['fraudulent']:,}</div></div>""", unsafe_allow_html=True)
+            c4.markdown(f"""<div class="stat-card"><div class="stat-label">Fraud Rate</div>
+                <div class="stat-value amber">{data['fraud_rate_pct']}%</div></div>""", unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown(f"""
-            <div class='glass-card'>
-                <h3>📊 Prediction Summary</h3>
-                <div class='metric-row'>
-                    <div class='metric-chip'><div class='label'>Total</div>
-                        <div class='value'>{n_total:,}</div></div>
-                    <div class='metric-chip'><div class='label'>Legitimate</div>
-                        <div class='value' style='color:#10b981;'>{n_legit:,}</div></div>
-                    <div class='metric-chip'><div class='label'>Fraudulent</div>
-                        <div class='value' style='color:#ef4444;'>{n_fraud:,}</div></div>
-                    <div class='metric-chip'><div class='label'>Fraud Rate</div>
-                        <div class='value' style='color:#f59e0b;'>{fraud_pct}<span style='font-size:0.8rem;'>%</span></div></div>
-                </div>
-            </div>""", unsafe_allow_html=True)
-
             result_df = pd.DataFrame(data["predictions"])
             result_df.index = range(1, len(result_df) + 1)
+            st.dataframe(result_df, use_container_width=True, height=320)
 
-            st.markdown("<div class='glass-card'><h3>📄 Detailed Results</h3></div>",
-                        unsafe_allow_html=True)
-            st.dataframe(result_df, use_container_width=True, height=400)
-
-            csv_out = result_df.to_csv(index=False).encode("utf-8")
             st.download_button(
-                label="⬇️  Download Results CSV",
-                data=csv_out,
+                label="⬇️  Download Full Results (CSV)",
+                data=result_df.to_csv(index=False).encode("utf-8"),
                 file_name="fraud_predictions.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
+
+    elif not uploaded_file:
+        st.markdown("""
+        <div style="height: 180px; display: flex; align-items: center; justify-content: center;
+                    border: 2px dashed rgba(139,92,246,0.2); border-radius: 12px; margin-top: 0.5rem;">
+            <div style="text-align:center; color:#475569;">
+                <div style="font-size:2.5rem; margin-bottom:0.5rem;">📄</div>
+                <div style="font-size:0.9rem; font-weight:500; color:#64748b;">Your preview will appear here</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+with right:
+    # Info card
+    st.markdown("""
+    <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-title">📋 Expected Format</div>
+        <div class="info-pill">
+            Required columns:<br>
+            <code>Time</code> &nbsp;·&nbsp; <code>V1</code> – <code>V28</code> &nbsp;·&nbsp; <code>Amount</code><br><br>
+            <code>Class</code> is optional and will be ignored.<br><br>
+            Tip: Works with Kaggle's <b>Credit Card Fraud</b> dataset directly.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Pipeline card
+    st.markdown("""
+    <div class="card">
+        <div class="card-title">🔬 ML Pipeline</div>
+    """, unsafe_allow_html=True)
+
+    steps = [
+        ("📥", "Data Ingestion",      "Pulls from MongoDB Atlas"),
+        ("✅", "Validation",          "Schema & drift checks"),
+        ("⚙️", "Transformation",      "KNN imputation + scaling"),
+        ("🤖", "Model Training",      "Best of LR · DT · RF"),
+        ("📈", "MLflow Tracking",     "Logged to DagsHub"),
+    ]
+    for icon, title, desc in steps:
+        st.markdown(f"""
+        <div style="display:flex; gap:0.75rem; align-items:flex-start; padding: 0.6rem 0;
+                    border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <span style="font-size:1.1rem; margin-top:1px;">{icon}</span>
+            <div>
+                <div style="color:#e2e8f0; font-size:0.85rem; font-weight:600;">{title}</div>
+                <div style="color:#64748b; font-size:0.78rem;">{desc}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Train expander
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("⚙️  Retrain the Model"):
+        st.markdown("""<p style='color:#94a3b8; font-size:0.85rem; margin-bottom:1rem;'>
+            Triggers the full pipeline end-to-end. Takes 5–15 minutes.</p>""",
+            unsafe_allow_html=True)
+        if st.button("▶  Start Training Pipeline", disabled=not api_online):
+            with st.spinner("Pipeline running…"):
+                try:
+                    resp = requests.get(f"{API_BASE}/train", timeout=900)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    st.success("✅ Training complete!")
+                    st.metric("Test F1",        data.get("test_f1", "—"))
+                    st.metric("Test Precision",  data.get("test_precision", "—"))
+                    st.metric("Test Recall",     data.get("test_recall", "—"))
+                except requests.exceptions.Timeout:
+                    st.error("Timed out. The pipeline may still be running.")
+                except Exception as ex:
+                    st.error(f"Error: {ex}")
+
+# ── Footer ─────────────────────────────────────────────────────────────────────
+st.markdown("""
+<hr class='sep'>
+<div style='text-align:center; color:#334155; font-size:0.78rem; padding-bottom:1rem;'>
+    FraudShield &nbsp;·&nbsp; Credit Card Fraud Detection &nbsp;·&nbsp; 
+    Built with FastAPI &amp; Streamlit
+</div>
+""", unsafe_allow_html=True)

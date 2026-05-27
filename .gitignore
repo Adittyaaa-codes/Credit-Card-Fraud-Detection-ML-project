@@ -12,7 +12,7 @@ logs/
 creditcard.csv
 final_model
 main.py
-
+tests/
 # Virtual environments
 .venv
 .env
