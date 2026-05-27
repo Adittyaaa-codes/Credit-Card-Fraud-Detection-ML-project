@@ -77,12 +77,25 @@ async def predict_route(file: UploadFile = File(...)):
         df = pd.read_csv(file.file)
         logging.info(f"Received prediction request: {df.shape[0]} rows")
 
-        model = load_object("final_model/model.pkl")
+        model_path       = "final_model/model.pkl"
+        preprocessor_path = "final_model/preprocessor.pkl"
+
+        if not os.path.exists(model_path) or not os.path.exists(preprocessor_path):
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Model not found. Please run the training pipeline first via GET /train."}
+            )
+
+        preprocessor = load_object(preprocessor_path)
+        model        = load_object(model_path)
+
+        detection_model = DetectionModel(preprocessor=preprocessor, model=model)
+
         input_df = df.drop(columns=["Class"], errors="ignore")
-        y_pred = model.predict(input_df)
+        y_pred   = detection_model.predict(input_df)
 
         df["predicted_column"] = y_pred
-        df["fraud_label"] = df["predicted_column"].map({0: "Legitimate", 1: "Fraudulent"})
+        df["fraud_label"]      = df["predicted_column"].map({0: "Legitimate", 1: "Fraudulent"})
 
         os.makedirs("prediction_output", exist_ok=True)
         df.to_csv("prediction_output/output.csv", index=False)
