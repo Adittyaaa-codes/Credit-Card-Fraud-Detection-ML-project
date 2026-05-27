@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+random.ipynb
+main.py
+artifacts/
+logs/
+creditcard.csv
+final_model
+main.py
+
+# Virtual environments
+.venv
+.env
