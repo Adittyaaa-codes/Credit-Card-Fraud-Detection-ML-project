@@ -82,7 +82,11 @@ jobs:
       
       - name: Clean up disk space before deployment
         run: |
+          docker stop $(docker ps -aq) 2>/dev/null || true
+          docker rm   $(docker ps -aq) 2>/dev/null || true
           docker system prune -af --volumes
+          find ~/actions-runner/_diag/pages -type f -mtime +1 -delete 2>/dev/null || true
+          find ~/actions-runner/_diag      -name "*.log" -mtime +1 -delete 2>/dev/null || true
           df -h
 
       - name: Pull latest images
