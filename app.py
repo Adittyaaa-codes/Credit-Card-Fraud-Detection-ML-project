@@ -40,7 +40,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.get("/", tags=["Health"])
 async def index():
     return RedirectResponse(url="/docs")
@@ -75,10 +74,9 @@ async def train_route():
 async def predict_route(file: UploadFile = File(...)):
     try:
         df = pd.read_csv(file.file)
-        logging.info(f"Received prediction request: {df.shape[0]} rows")
 
-        model_path       = "final_model/model.pkl"
-        preprocessor_path = "final_model/preprocessor.pkl"
+        model_path = os.getenv("AWS_BUCKET_MODEL_URL")
+        preprocessor_path = os.getenv("AWS_BUCKET_PREPROCESSOR_URL")
 
         if not os.path.exists(model_path) or not os.path.exists(preprocessor_path):
             return JSONResponse(
@@ -87,7 +85,7 @@ async def predict_route(file: UploadFile = File(...)):
             )
 
         preprocessor = load_object(preprocessor_path)
-        model        = load_object(model_path)
+        model = load_object(model_path)
 
         detection_model = DetectionModel(preprocessor=preprocessor, model=model)
 
@@ -95,7 +93,7 @@ async def predict_route(file: UploadFile = File(...)):
         y_pred   = detection_model.predict(input_df)
 
         df["predicted_column"] = y_pred
-        df["fraud_label"]      = df["predicted_column"].map({0: "Legitimate", 1: "Fraudulent"})
+        df["fraud_label"] = df["predicted_column"].map({0: "Legitimate", 1: "Fraudulent"})
 
         os.makedirs("prediction_output", exist_ok=True)
         df.to_csv("prediction_output/output.csv", index=False)
@@ -116,4 +114,4 @@ async def predict_route(file: UploadFile = File(...)):
 
 
 if __name__ == "__main__":
-    app_run(app, host="0.0.0.0", port=8000)
+    app_run(app, host="localhost", port=8001)

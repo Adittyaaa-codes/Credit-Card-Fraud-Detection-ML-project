@@ -12,7 +12,8 @@ logs/
 creditcard.csv
 main.py
 tests/
-
+prediction_output
 # Virtual environments
 .venv
 .env
+final_model

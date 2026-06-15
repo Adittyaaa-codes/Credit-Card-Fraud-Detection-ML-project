@@ -18,6 +18,8 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, StratifiedShuffleSplit
 
+import xgboost as xgb
+
 import mlflow
 import dagshub
 
@@ -49,30 +51,43 @@ class ModelTrainer:
             X_fit, y_fit = X_train[sample_idx], y_train[sample_idx]
             logging.info(f"Training on 20% sample: {len(X_fit):,} rows out of {len(X_train):,}")
 
+            # models = {
+            #     "Logistic Regression": Pipeline([
+            #         ("scaler", StandardScaler()),
+            #         ("classifier", LogisticRegression(max_iter=1000, solver="lbfgs", random_state=42))
+            #     ]),
+            #     "Decision Tree": DecisionTreeClassifier(random_state=42),
+            #     "Random Forest": RandomForestClassifier(n_jobs=-1, random_state=42),
+            # }
+
+            # params = {
+            #     "Logistic Regression": {"classifier__C": [0.01, 0.1, 1.0, 10.0]},
+            #     "Decision Tree": {"criterion": ["gini", "entropy"], "max_depth": [None, 5, 10, 20]},
+            #     "Random Forest": {"n_estimators": [50, 100], "max_depth": [None, 10, 20], "min_samples_split": [2, 5]},
+            # }
+
             models = {
-                "Logistic Regression": Pipeline([
-                    ("scaler", StandardScaler()),
-                    ("classifier", LogisticRegression(max_iter=1000, solver="lbfgs", random_state=42))
-                ]),
-                "Decision Tree": DecisionTreeClassifier(random_state=42),
-                "Random Forest": RandomForestClassifier(n_jobs=-1, random_state=42),
+                "XGBoost": xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42,n_jobs=-1)
             }
 
             params = {
-                "Logistic Regression": {"classifier__C": [0.01, 0.1, 1.0, 10.0]},
-                "Decision Tree": {"criterion": ["gini", "entropy"], "max_depth": [None, 5, 10, 20]},
-                "Random Forest": {"n_estimators": [50, 100], "max_depth": [None, 10, 20], "min_samples_split": [2, 5]},
+                "XGBoost": {
+                    "n_estimators": [50, 100],
+                    "max_depth": [3, 7],
+                    "learning_rate": [0.01, 0.1]
+                }
             }
 
+            
             model_report: dict = evaluate_models(
                 X_train=X_fit, y_train=y_fit, X_test=x_test, y_test=y_test,
                 models=models, param=params,
             )
 
             best_model_score = max(model_report.values())
-            best_model_name  = max(model_report, key=model_report.get)
-            best_model       = models[best_model_name]
-            logging.info(f"Best model: '{best_model_name}' | test F1 = {best_model_score:.4f}")
+            best_model_name = max(model_report, key=model_report.get)
+            best_model = models[best_model_name]
+            logging.info(f"Best model: '{best_model_name}' || test F1 = {best_model_score:.4f}")
 
             y_train_pred = best_model.predict(X_train)
             classification_train_metric = get_classification_score(y_true=y_train, y_pred=y_train_pred)
@@ -109,7 +124,6 @@ class ModelTrainer:
             train_file_path = self.data_transformation_artifact.transformed_train_file_path
             test_file_path = self.data_transformation_artifact.transformed_test_file_path
 
-         
             train_arr = load_numpy_array(train_file_path)
             test_arr = load_numpy_array(test_file_path)
 

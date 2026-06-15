@@ -11,3 +11,4 @@ pyaml
 dagshub
 streamlit
 setuptools
+xgboost
