@@ -17,3 +17,4 @@ prediction_output
 .venv
 .env
 final_model
+*.pkl
